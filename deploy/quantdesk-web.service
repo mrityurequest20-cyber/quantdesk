@@ -1,0 +1,15 @@
+# The phone app for a self-hosted desk (see quantdesk-desk.service for install steps).
+[Unit]
+Description=QuantDesk phone app
+After=network-online.target
+
+[Service]
+User=quantdesk
+WorkingDirectory=/opt/quantdesk
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m quantdesk serve --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

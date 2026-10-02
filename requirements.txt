@@ -1,0 +1,10 @@
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+pyyaml>=6.0
+requests>=2.31           # news feeds, NSE option chain
+pyarrow>=15            # the data warehouse (Parquet)
+yfinance>=0.2.54      # Yahoo data source (curl_cffi: survives Yahoo's cloud-IP rate limits) (NSE: *.NS, ^NSEI, ^NSEBANK, ^INDIAVIX)
+pytest>=8.0
+# optional, live trading only:
+# kiteconnect>=5.0

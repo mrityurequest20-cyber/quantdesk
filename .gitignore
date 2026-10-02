@@ -1,0 +1,6 @@
+runtime/
+data/csv/
+*.db
+__pycache__/
+.pytest_cache/
+node_modules/

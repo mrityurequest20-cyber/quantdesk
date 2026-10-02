@@ -1,0 +1,20 @@
+# Self-hosted desk with the full phone app (Pause / Flatten / Close work here, unlike the
+# read-only GitHub Pages site):
+#
+#   echo "QUANTDESK_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')" > .env
+#   docker compose up -d --build
+#   open http://<this-machine>:8765/?token=<the token>     (Tailscale for access from anywhere)
+services:
+  desk:                       # trades every NSE session by itself, sleeps in between
+    build: .
+    command: python -m quantdesk intraday live --forever --quiet
+    volumes: ["./runtime:/app/runtime"]
+    restart: unless-stopped
+  web:                        # the phone app, reading the same journal
+    build: .
+    command: python -m quantdesk serve --host 0.0.0.0 --port 8765
+    environment:
+      QUANTDESK_TOKEN: ${QUANTDESK_TOKEN:?put QUANTDESK_TOKEN=... in .env}
+    ports: ["8765:8765"]
+    volumes: ["./runtime:/app/runtime"]
+    restart: unless-stopped

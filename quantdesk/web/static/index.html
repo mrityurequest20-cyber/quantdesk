@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuantDesk</title>
+<style>
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;
+--axis:#c3c2b7;--ring:rgba(11,11,11,.10);--up:#2a78d6;--down:#e34948;--s1:#2a78d6;--good:#006300;--bad:#d03b3b;--warn:#8a5a00;--wash:rgba(11,11,11,.04)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;
+--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--up:#3987e5;--down:#e66767;--s1:#3987e5;--good:#0ca30c;--bad:#e66767;--warn:#fab219;--wash:rgba(255,255,255,.05)}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;
+--axis:#383835;--ring:rgba(255,255,255,.10);--up:#3987e5;--down:#e66767;--s1:#3987e5;--good:#0ca30c;--bad:#e66767;--warn:#fab219;--wash:rgba(255,255,255,.05)}
+*{box-sizing:border-box}html,body{margin:0;background:var(--page);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--ring);background:var(--surface)}
+header h1{font-size:16px;margin:0}header .kv{display:flex;flex-direction:column}header .kv span{color:var(--ink2);font-size:11px}
+header .kv b{font-size:15px;font-variant-numeric:tabular-nums}.spacer{flex:1}
+button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--ring);border-radius:7px;padding:5px 10px;cursor:pointer}
+button:hover{background:var(--wash)}button.buy{border-color:var(--up)}button.sell{border-color:var(--down)}button.on{background:var(--wash);font-weight:600}
+input{font:inherit;color:var(--ink);background:var(--page);border:1px solid var(--ring);border-radius:7px;padding:5px 8px;width:100%}
+main{display:grid;grid-template-columns:230px minmax(0,1fr) 360px;gap:12px;padding:12px;align-items:start}
+@media (max-width:1180px){main{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:12px;margin-bottom:12px;min-width:0}
+.card h2{font-size:13px;margin:0 0 8px;color:var(--ink2);font-weight:600}
+.wl{list-style:none;margin:0;padding:0}.wl li{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer}
+.wl li:hover{background:var(--wash)}.wl li.sel{background:var(--wash);font-weight:600}.wl small{color:var(--muted);display:block;font-weight:400}
+.num{font-variant-numeric:tabular-nums;text-align:right}.pos{color:var(--good)}.neg{color:var(--bad)}
+#chart{height:520px;position:relative}#chart svg{width:100%;height:100%;display:block}#chart svg text{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.bar .title{font-weight:600;font-size:15px;margin-right:6px}
+.badge{display:inline-block;border:1px solid var(--ring);border-radius:999px;padding:1px 8px;font-size:11px;color:var(--ink2)}
+pre{white-space:pre-wrap;margin:0;font-size:12px;line-height:1.5}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-bottom:1px solid var(--grid);vertical-align:top}th{color:var(--ink2);font-weight:600;text-align:left}
+.st-PASS{color:var(--good)}.st-WARN{color:var(--warn)}.st-FAIL{color:var(--bad)}.st-INFO{color:var(--muted)}
+.review{border-top:1px solid var(--grid);padding:6px 0}.review .g{display:inline-block;min-width:20px;text-align:center;border:1px solid var(--ring);border-radius:5px;font-weight:600;margin-right:6px}
+.ticket{display:grid;grid-template-columns:1fr 1fr;gap:6px}.ticket label{color:var(--ink2);font-size:11px}
+.tt{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:8px 10px;font-size:12px;
+box-shadow:0 4px 16px rgba(0,0,0,.14);display:none;z-index:9;max-width:360px}.tt b{font-variant-numeric:tabular-nums}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:8px 14px;display:none;z-index:10}
+.legend{display:flex;gap:14px;color:var(--ink2);font-size:11px;margin-top:6px;flex-wrap:wrap}.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px}
+.note{color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>QuantDesk</h1>
+  <div class="kv"><span>Equity</span><b id="h-eq">—</b></div>
+  <div class="kv"><span>Drawdown</span><b id="h-dd">—</b></div>
+  <div class="kv"><span>Regime</span><b id="h-regime">—</b></div>
+  <div class="kv"><span>Last EOD cycle</span><b id="h-last">—</b></div>
+  <div class="kv"><span>Risk</span><b id="h-risk">—</b></div>
+  <div class="spacer"></div>
+  <span class="badge" id="mode">loading chart…</span>
+  <button id="theme" title="Toggle light/dark">Theme</button>
+</header>
+<main>
+  <section>
+    <div class="card"><h2>Watchlist</h2><ul class="wl" id="watchlist"></ul></div>
+  </section>
+  <section>
+    <div class="card">
+      <div class="bar"><span class="title" id="sym-title">—</span><span class="badge" id="sym-meta"></span>
+        <span class="spacer"></span>
+        <span id="ranges"></span></div>
+      <div id="chart"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="card"><h2>Analysis</h2><pre id="analysis">…</pre></div>
+  </section>
+  <section>
+    <div class="card"><h2>Paper order ticket</h2>
+      <div class="ticket">
+        <div><label for="t-qty">Quantity (shares / lots)</label><input id="t-qty" type="number" min="1" value="1"></div>
+        <div><label for="t-stop">Stop</label><input id="t-stop" type="number" step="0.05"></div>
+        <div><label for="t-tgt">Target</label><input id="t-tgt" type="number" step="0.05"></div>
+        <div style="display:flex;gap:6px;align-items:end"><button class="buy" id="t-buy">Buy</button><button class="sell" id="t-sell">Sell</button></div>
+      </div>
+      <p class="note">Fills at the last price in the paper account and is journaled as a manual trade. The chart's own trading UI (GoCharting mode) routes here too.</p>
+    </div>
+    <div class="card"><h2>Open positions</h2><div id="positions"></div></div>
+    <div class="card"><h2>Queued for next open</h2><div id="queued"></div></div>
+    <div class="card"><h2>Journal: latest reviews</h2><div id="reviews"></div></div>
+    <div class="card"><h2>Routine checks</h2><div id="checks"></div></div>
+  </section>
+</main>
+<div class="tt" id="tt"></div>
+<div id="toast"></div>
+<script src="/static/datafeed.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# systemd (Linux, always-on machine). Install:
+#   sudo cp deploy/quantdesk-*.service /etc/systemd/system/
+#   sudo systemctl edit quantdesk-web   # add: [Service] Environment=QUANTDESK_TOKEN=<long random string>
+#   sudo systemctl enable --now quantdesk-desk quantdesk-web
+# Edit User= and WorkingDirectory= to your checkout.
+[Unit]
+Description=QuantDesk intraday options desk (paper): trades every NSE session
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=quantdesk
+WorkingDirectory=/opt/quantdesk
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m quantdesk intraday live --forever --quiet
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

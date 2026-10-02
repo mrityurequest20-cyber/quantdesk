@@ -1,0 +1,335 @@
+# QuantDesk configuration.
+# Every number that changes behaviour lives here, so strategies and the risk
+# engine never hard-code a threshold. Override any key with a second YAML file:
+#   python -m quantdesk --config config/quantdesk.yaml --config my_overrides.yaml ...
+
+account:
+  name: paper-main
+  starting_capital: 2000000        # INR
+  mode: paper                      # paper | live  (live ALSO needs the --live CLI flag and broker creds)
+
+runtime:
+  dir: runtime                     # journal DB, broker state, reports, cache (git-ignored)
+
+data:
+  source: yahoo                    # yahoo | csv | synthetic
+  csv_dir: data/csv                # <SYMBOL>.csv with date,open,high,low,close,volume
+  history_years: 8
+  synthetic_seed: 1                # calibrated 2015-26: 11.3% CAGR, 15% vol, -39% max DD (real NIFTY: ~11%, ~16%, -38%)
+
+universe:
+  indices: [NIFTY, BANKNIFTY]
+  equities: [RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS, ITC, LT, SBIN, BHARTIARTL, AXISBANK, KOTAKBANK, HINDUNILVR]
+  volatility_index: INDIAVIX
+  benchmark: NIFTY
+  pairs:
+    - [HDFCBANK, ICICIBANK]
+    - [INFY, TCS]
+    - [AXISBANK, KOTAKBANK]
+
+# Contract specs. Lot sizes: NSE circular NSE/FAOP/70616 (Jan-2026 series onward).
+# Expiry: NIFTY weekly on Tuesday; BANKNIFTY monthly only (last Tuesday). Re-verify
+# whenever NSE issues a new circular — these change every few quarters.
+instruments:
+  NIFTY:     {yahoo: "^NSEI",     kind: index, lot_size: 65, strike_step: 50,  weekly_expiry: true,  expiry_weekday: 1, iv_beta: 1.00}
+  BANKNIFTY: {yahoo: "^NSEBANK",  kind: index, lot_size: 30, strike_step: 100, weekly_expiry: false, expiry_weekday: 1, iv_beta: 1.22}
+  INDIAVIX:  {yahoo: "^INDIAVIX", kind: vol_index}
+  _equity_default: {yahoo_suffix: ".NS", kind: equity, lot_size: 1}
+
+# Indian statutory charges (fractions of turnover). STT for F&O as revised in
+# Union Budget 2026-27, effective 1-Apr-2026. Verify against your broker's
+# contract note; these move with every budget and exchange circular.
+costs:
+  brokerage_per_order: 20.0        # flat fee, discount broker (F&O / intraday)
+  brokerage_pct_cap: 0.0003        # ...or 0.03% of turnover if lower
+  delivery_brokerage: 0.0
+  gst: 0.18                        # on brokerage + exchange + SEBI fees
+  sebi_per_crore: 10.0
+  segments:
+    equity_delivery: {stt_buy: 0.001,  stt_sell: 0.001,   exchange: 0.0000297, stamp_buy: 0.00015}
+    equity_intraday: {stt_buy: 0.0,    stt_sell: 0.00025, exchange: 0.0000297, stamp_buy: 0.00003}
+    futures:         {stt_buy: 0.0,    stt_sell: 0.0005,  exchange: 0.0000173, stamp_buy: 0.00002}
+    options:         {stt_buy: 0.0,    stt_sell: 0.0015,  exchange: 0.0003503, stamp_buy: 0.00003}
+
+slippage:
+  equity_bps: 4
+  index_bps: 1.5
+  atr_fraction: 0.02               # extra adverse slippage = 2% of ATR (vol-aware)
+  option_half_spread_pct: 0.012    # half of bid-ask as % of premium
+  option_min_half_spread: 0.10     # INR, at least two ticks on cheap options
+  option_tick: 0.05
+
+risk:
+  risk_per_trade: 0.0075           # equity fraction lost if the stop is hit (linear trades)
+  options_max_loss_per_trade: 0.025  # worst-case (max) loss of one defined-risk option structure
+  max_open_trades: 10
+  max_gross_exposure: 2.0          # delta-adjusted notional / equity
+  max_symbol_exposure: 0.40
+  max_strategy_open_risk: 0.03     # sum of open risk per strategy
+  max_total_open_risk: 0.10
+  daily_loss_limit: 0.02           # stop opening trades after a -2% day
+  drawdown_derisk_start: 0.06      # scale risk down linearly from here...
+  max_drawdown_halt: 0.15          # ...to zero; at this DD flatten and halt
+  max_net_vega_pct: 0.0035         # |vega per 1 vol pt| / equity
+  max_net_delta: 1.5               # |delta notional| / equity
+  max_orders_per_day: 40
+  kelly_fraction: 0.25
+  vol_target_annual: 0.12
+  short_option_margin_pct: 0.12    # rough SPAN+exposure for naked short index options
+  max_margin_utilisation: 0.95     # equity delivery counts at full notional
+  futures_margin_pct: 0.15
+
+intraday:
+  capital: 20000                   # paper account for the intraday options desk (start small, grow)
+  underlyings: [NIFTY, BANKNIFTY]
+  feed: kotak                      # kotak | yahoo | kite (kotak without KOTAK_CONSUMER_KEY = yahoo; replay/synthetic: CLI)
+  chain: kotak                     # kotak (falls back to NSE) | nse | kite | model; kotak without a key = nse
+  chain_refresh_min: 3             # NSE throttles; don't hammer it (Kotak: intraday.kotak.refresh_min)
+  kotak:                           # Kotak Neo Trade API, data endpoints only (consumer key; no login, no static IP)
+    refresh_min: 1                 # option chain + live bid/ask every minute (~3 calls per underlying)
+    strikes: 20                    # strikes each side of the money (a multiple of 10): 41 strikes, ~2 quote calls
+  heavyweights:                    # their results (NSE's event calendar, via the warehouse) are noted as context
+    NIFTY: [HDFCBANK, ICICIBANK, RELIANCE, INFY, BHARTIARTL, LT, ITC, TCS, SBIN, AXISBANK, KOTAKBANK]
+    BANKNIFTY: [HDFCBANK, ICICIBANK, SBIN, KOTAKBANK, AXISBANK]
+  max_entry_slip: 0.15             # with a live book: skip an entry if the net premium moved >15% against the plan
+  chain_stale_min: 12              # no new entries on an older real chain
+  thought_every_min: 5             # journal the market read at least this often
+  history_days: 6                  # prior sessions loaded for levels, value areas, relative volume
+  expiry_min_days: 1               # skip 0-DTE: trade the next expiry on expiry day
+  adverse_ticks: 1                 # extra slippage on top of bid/ask fills
+  news:                            # live headlines (RSS): tone as evidence, stand aside after breaking news
+    enabled: true
+    refresh_min: 4
+    window_min: 120                # stories older than this don't count
+    half_life_min: 45              # recency weighting of the tone
+    min_relevance: 2.0             # keyword relevance to count for an underlying
+    breaking_stand_aside_min: 15   # no new entries this long after a high-impact story (not previews)
+    # sources: [{name: ..., url: ...}]   # defaults: ET, Moneycontrol, Mint, Business Standard, Google News, RBI
+  global:                          # 18 global markets (US, Asia, Europe, $, ₹, crude, gold, UST, US VIX) via Yahoo
+    enabled: true
+    refresh_min: 5
+  brain:                           # global ↔ news ↔ India ↔ decision; votes only with research-validated links
+    stress_z: 2.0                  # global moves bigger than this (σ) shrink size...
+    min_size_mult: 0.5             # ...down to this multiple (with 1-lot sizes that means standing aside)
+  quant:                           # the decision layer: vol forecast, direction model, expected value of every plan
+    enabled: true
+    train_days: 55                 # 5m history for the direction model (Yahoo keeps ~60 days)
+    min_auc: 0.53                  # walk-forward AUC the model must reach before it's used
+    prior_tilt: 0.10               # no validated model: P(up) = 0.5 + 0.10 × analyst score (an explicit, unvalidated prior)
+    n_paths: 2000                  # Monte Carlo paths per candidate structure
+    min_ev_inr: 40                 # EV per lot after every cost, to take a trade...
+    min_ev_r: 0.05                 # ...and at least this fraction of the planned risk
+    long_deltas: [0.30, 0.40]      # single-option alternatives priced for every directional signal
+    spreads: [[0.45, 0.30], [0.50, 0.20]]
+  analyst:
+    min_conviction: 0.45
+    iv_rv_rich: 1.15
+    iv_rv_cheap: 0.90
+    weights: {}                    # override evidence weights, e.g. {vwap: 1.2, pcr: 0.5}
+  risk:
+    # Sized for a ₹20k account. The smallest sensible NIFTY position (one lot of a narrow weekly
+    # debit spread, ~₹4-5k) risks ~₹1.2-1.6k to its stop, so risk per trade can't be 1% here:
+    # it's 8% of equity × a conviction scale (0.6-1.2), which only lets high-conviction plans
+    # through. BANKNIFTY (monthly expiries only) is priced out at this size; it stays analysed.
+    risk_per_trade: 0.08
+    max_trades_per_day: 2           # each round trip costs ~₹110-130 (4 orders × ₹20 + taxes) ≈ 0.6% of ₹20k
+    max_open: 1
+    daily_loss_limit: 0.10         # ₹2k: roughly one full stop-out plus costs, then done for the day
+    min_stop_atr5: 0.75            # an invalidation closer than this × the 5m ATR is pushed out to it (noise floor)
+    cooldown_after_losses: 2
+    cooldown_min: 30
+    no_entry_before: "09:20"
+    no_entry_after: "14:45"
+    square_off: "15:15"
+    max_spread_pct: 0.06
+    max_premium_outlay: 0.35       # debit paid, fraction of equity (and never more than the cash)
+    max_margin: 0.5
+    credit_margin_per_lot: 30000   # SPAN+exposure on a hedged index spread ≈ ₹25-35k/lot: credit trades need a bigger account
+    max_lots: 10
+  setups:
+    orb:          {enabled: true, until_min: 120, min_rel_volume: 0.8, long_delta: 0.45, short_delta: 0.30, always_spread: true, premium_stop: 0.30, premium_target: 0.60, time_stop_min: 45}
+    vwap_trend:   {enabled: true, after_min: 45, long_delta: 0.45, short_delta: 0.30, always_spread: true, premium_stop: 0.30, premium_target: 0.60, time_stop_min: 60}
+    trend_break:  {enabled: true, after_min: 60, until_min: 330, long_delta: 0.45, short_delta: 0.30, always_spread: true, premium_stop: 0.30, premium_target: 0.60, time_stop_min: 45}
+    va_reversion: {enabled: true, after_min: 75, until_min: 300, max_abs_score: 0.40, rsi_hi: 60, rsi_lo: 40, long_delta: 0.45, short_delta: 0.30, always_spread: true, premium_stop: 0.35, premium_target: 0.60, time_stop_min: 60}
+    range_sell:   {enabled: true, after_min: 75, until_min: 255, max_abs_score: 0.30, wing_mult: 1.0, stop_mult: 0.8, take_profit: 0.30, time_stop_min: 120}
+
+web:
+  host: 127.0.0.1                  # the desk UI; keep it on localhost
+  port: 8765
+  gocharting:
+    enabled: true
+    # Hosted UMD build; {key} is replaced with the license key. The public demo key is the one
+    # GoCharting's own CodePen uses; set GOCHARTING_LICENSE_KEY (or this field) to your key.
+    license_key: demo-550e8400-e29b-41d4-a716-446655440000
+    sdk_url: https://gocharting.com/sdk/library/{key}/index.umd.js
+    theme: dark
+
+live:
+  price_protection: 0.01           # marketable LIMIT at LTP ± 1%, never a bare MARKET order
+  max_order_value: 500000          # INR notional per order
+  fill_timeout_sec: 20
+
+# Strategy roster. `enabled: false` removes a strategy everywhere.
+strategies:
+  trend_rider:
+    enabled: true
+    symbols: equities
+    fast: 20
+    slow: 50
+    trend_filter: 200
+    adx_min: 20
+    atr_stop: 2.5
+    chandelier_atr: 3.0
+    long_only: true
+  breakout:
+    enabled: true
+    symbols: equities
+    entry_lookback: 55
+    exit_lookback: 20
+    atr_stop: 2.0
+    squeeze_pct: 0.35              # Bollinger bandwidth percentile below which a range counts as "coiled"
+    long_only: true
+  mean_reversion:
+    enabled: true
+    symbols: equities
+    z_window: 20
+    z_entry: -2.0
+    z_exit: 0.0
+    rsi_len: 3
+    rsi_entry: 15
+    trend_filter: 200
+    hurst_max: 0.55
+    atr_stop: 3.0
+    time_stop: 8
+  momentum:
+    enabled: true
+    symbols: equities
+    lookback: 252
+    skip: 21
+    top_n: 3
+    rebalance_every: 21
+    min_momentum: 0.0
+    atr_stop: 3.5
+  pairs:
+    enabled: true
+    formation: 250
+    z_entry: 2.0
+    z_exit: 0.4
+    z_stop: 3.8
+    max_pvalue: 0.05
+    max_half_life: 40
+    retest_every: 21
+    time_stop: 45
+  vrp_condor:
+    enabled: true
+    symbols: indices
+    min_iv_rank: 0.40
+    min_vrp: 1.5                   # IV minus GARCH-forecast RV, vol points
+    short_delta: 0.16
+    wing_delta: 0.06
+    target_dte: 14
+    min_dte: 6
+    take_profit: 0.50              # of credit
+    stop_loss: 1.5                 # x credit
+    exit_dte: 1
+    max_vix: 30
+  trend_spread:
+    enabled: true
+    symbols: indices
+    fast: 20
+    slow: 50
+    adx_min: 22
+    max_iv_rank: 0.55
+    long_delta: 0.55
+    short_delta: 0.25
+    target_dte: 28
+    take_profit: 0.60              # of max profit
+    stop_loss: 0.50                # of debit
+    exit_dte: 5
+  long_vol:
+    enabled: true
+    symbols: indices
+    max_iv_rank: 0.25
+    min_edge: 2.0                  # GARCH forecast RV minus IV, vol points
+    squeeze_pct: 0.20
+    target_dte: 21
+    take_profit: 0.60
+    stop_loss: 0.40
+    exit_dte: 7
+
+allocator:
+  lookback_trades: 20              # recent closed trades used for the performance tilt
+  perf_tilt: 0.5                   # 0 = pure regime weights, 1 = heavy performance tilt
+  min_weight: 0.25
+  max_weight: 1.50
+  # multiplier on risk_per_trade by (strategy family, regime)
+  regime_weights:
+    trend:          {trending_up: 1.3, trending_down: 1.0, range: 0.5, stressed: 0.4}
+    mean_reversion: {trending_up: 0.8, trending_down: 0.5, range: 1.3, stressed: 0.3}
+    momentum:       {trending_up: 1.2, trending_down: 0.6, range: 0.8, stressed: 0.3}
+    pairs:          {trending_up: 1.0, trending_down: 1.0, range: 1.1, stressed: 0.6}
+    short_vol:      {trending_up: 1.0, trending_down: 0.6, range: 1.3, stressed: 0.0}
+    long_vol:       {trending_up: 0.6, trending_down: 1.0, range: 1.0, stressed: 1.2}
+
+regime:
+  hmm_states: 2
+  hmm_refit_every: 63
+  hmm_min_history: 500
+  vol_lookback: 252
+
+backtest:
+  start: "2018-01-01"
+  end: null
+  warmup_bars: 260
+  fill: next_open                  # signals at close t, fills at open t+1 (no look-ahead)
+  risk_free: 0.065                 # annual, INR (≈ 91-day T-bill)
+  dividend_yield: 0.012
+
+calendar:
+  timezone: Asia/Kolkata
+  market_open: "09:15"
+  market_close: "15:30"
+  # NSE equity + F&O trading holidays, 2026 (NSE circular CMTR71775). The first six
+  # dates were cross-checked; re-verify the rest against the circular.
+  holidays:
+    - 2026-01-15   # Municipal Corporation elections, Maharashtra (NSE holiday master)
+    - 2026-01-26   # Republic Day
+    - 2026-03-03   # Holi
+    - 2026-03-26   # Shri Ram Navami
+    - 2026-03-31   # Shri Mahavir Jayanti
+    - 2026-04-03   # Good Friday
+    - 2026-12-25   # Christmas
+    - 2026-04-14   # Dr. Ambedkar Jayanti
+    - 2026-05-01   # Maharashtra Day
+    - 2026-05-28   # Bakri Id
+    - 2026-06-26   # Muharram
+    - 2026-09-14   # Ganesh Chaturthi
+    - 2026-10-02   # Gandhi Jayanti
+    - 2026-10-20   # Dussehra
+    - 2026-11-10   # Diwali Balipratipada
+    - 2026-11-24   # Guru Nanak Jayanti
+  # Scheduled macro events, with IST times (quantdesk/intraday/events.py). One inside the session blocks new
+  # intraday entries from `before_min` before to `after_min` after it; one after the close is context (today, and
+  # "since the last close" the next morning). No time = the whole session. Sources: RBI's FY27 MPC calendar, the
+  # Fed's FOMC calendar (decision 2:00 pm ET), BLS's CPI schedule (8:30 am ET); re-check them as the dates near.
+  events:
+    - {date: 2026-10-07, name: "RBI MPC decision", time: "10:00", before_min: 15, after_min: 45}
+    - {date: 2026-10-12, name: "India CPI (Sep)", time: "16:00"}
+    - {date: 2026-10-14, name: "US CPI (Sep)", time: "18:00"}
+    - {date: 2026-10-28, name: "US FOMC decision", time: "23:30"}
+    - {date: 2026-11-10, name: "US CPI (Oct)", time: "19:00"}
+    - {date: 2026-11-12, name: "India CPI (Oct)", time: "16:00"}
+    - {date: 2026-12-04, name: "RBI MPC decision", time: "10:00", before_min: 15, after_min: 45}
+    - {date: 2026-12-10, name: "US CPI (Nov)", time: "19:00"}
+    - {date: 2026-12-10, name: "US FOMC decision (9 Dec, US time)", time: "00:30"}
+    - {date: 2027-01-28, name: "US FOMC decision (27 Jan, US time)", time: "00:30"}
+    - {date: 2027-02-01, name: "Union Budget", time: "11:00", before_min: 15, after_min: 90}
+    - {date: 2027-02-05, name: "RBI MPC decision", time: "10:00", before_min: 15, after_min: 45}
+    - {date: 2027-03-17, name: "US FOMC decision", time: "23:30"}
+  event_blackout_days: 1
+
+checks:
+  max_data_staleness_days: 4
+  max_abs_return: 0.20             # a bigger one-day move is flagged as a probable bad tick
+  vix_warn: 22
+  vix_extreme: 30

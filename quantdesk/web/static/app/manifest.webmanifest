@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "QuantDesk",
+  "short_name": "QuantDesk",
+  "description": "An automated NIFTY / BANKNIFTY options paper-trading desk: its live read, chart, trades, the brain and the news it reads.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#08090b",
+  "theme_color": "#08090b",
+  "categories": ["finance", "business"],
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Chart", "short_name": "Chart", "url": "/#chart", "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Trades", "short_name": "Trades", "url": "/#trades", "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Brain", "short_name": "Brain", "url": "/#brain", "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]},
+    {"name": "News", "short_name": "News", "url": "/#feed", "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]}
+  ]
+}
